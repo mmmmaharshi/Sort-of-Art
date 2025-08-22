@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radix Pixel Sorter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+        }
+        canvas.brush-active {
+            cursor: none; /* Hide default cursor for custom one */
+        }
+        #cursor-ring {
+            position: absolute;
+            border: 2px solid white;
+            border-radius: 50%;
+            pointer-events: none; /* Make it unclickable */
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference;
+            transition: width 0.1s ease-out, height 0.1s ease-out;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-5xl bg-gray-800 rounded-xl shadow-2xl p-6 md:p-8 space-y-6">
+        <div class="text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-600">Radix Pixel Sorter</h1>
+            <p class="text-gray-400 mt-2">An unconventional use of Radix Sort for creating glitch art.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="bg-gray-700/50 p-6 rounded-lg space-y-4 flex flex-col">
+                <div>
+                    <label for="imageUpload" class="block text-lg font-medium text-gray-300 mb-2">1. Upload Image</label>
+                    <input type="file" id="imageUpload" accept="image/*" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-600 transition-colors cursor-pointer"/>
+                </div>
+
+                <div class="border-t border-b border-gray-600 py-4 space-y-3">
+                     <h3 class="text-lg font-medium text-gray-300">Interactive Brush</h3>
+                     <button id="brushModeBtn" class="w-full bg-cyan-600 p-3 rounded-lg text-center font-medium hover:bg-cyan-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed" disabled>Activate Brush Mode</button>
+                     <div id="brush-controls" class="hidden space-y-3">
+                        <div>
+                           <label for="brushSize" class="block text-sm font-medium text-gray-400">Brush Size: <span id="brushSizeLabel">50</span>px</label>
+                           <input type="range" id="brushSize" min="10" max="200" value="50" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400 mb-1">Brush Sort Type</label>
+                            <select id="brushSortType" class="w-full bg-gray-800 border border-gray-600 rounded-md p-2 text-white">
+                                <option value="brightness">Brightness</option>
+                                <option value="hue">Hue</option>
+                                <option value="saturation">Saturation</option>
+                                <option value="red">Red Channel</option>
+                                <option value="green">Green Channel</option>
+                                <option value="blue">Blue Channel</option>
+                            </select>
+                        </div>
+                     </div>
+                </div>
+                
+                <div>
+                    <label class="block text-lg font-medium text-gray-300 mb-2">Full Image Effects</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <button class="sort-mode-btn" data-mode="rgb" disabled>RGB Sort</button>
+                        <button class="effect-btn" id="windEffectBtn" disabled>Wind Effect</button>
+                        <button class="effect-btn" id="jaggedEffectBtn" disabled>Jagged Effect</button>
+                        <button class="effect-btn" id="spiralEffectBtn" disabled>Spiral Sort</button>
+                        <button class="w-full bg-pink-600 col-span-2 p-3 rounded-lg text-center font-medium hover:bg-pink-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-pink-500 disabled:opacity-50 disabled:cursor-not-allowed" id="randomizeBtn" disabled>Randomize!</button>
+                    </div>
+                </div>
+
+                <div class="flex-grow"></div>
+
+                <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                    <button id="resetBtn" class="w-full bg-gray-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>Reset</button>
+                    <a id="downloadBtn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors duration-200 text-center hidden" href="#" download="sorted-image.png">Download</a>
+                </div>
+                
+                <div id="loader" class="hidden mx-auto">
+                    <div class="loader"></div>
+                    <p id="loader-text" class="text-center mt-2 text-gray-400">Sorting pixels...</p>
+                </div>
+            </div>
+
+            <div class="relative bg-gray-900 rounded-lg flex items-center justify-center p-4 min-h-[300px]">
+                <canvas id="canvas"></canvas>
+                <div id="cursor-ring" class="hidden"></div>
+                <p id="canvas-placeholder" class="text-gray-500">Your image will appear here</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Element Selection ---
+        const imageUpload = document.getElementById('imageUpload');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const sortButtons = document.querySelectorAll('.sort-mode-btn');
+        const effectButtons = document.querySelectorAll('.effect-btn');
+        const randomizeBtn = document.getElementById('randomizeBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loader = document.getElementById('loader');
+        const loaderText = document.getElementById('loader-text');
+        const canvasPlaceholder = document.getElementById('canvas-placeholder');
+        // Brush UI
+        const brushModeBtn = document.getElementById('brushModeBtn');
+        const brushControls = document.getElementById('brush-controls');
+        const brushSize = document.getElementById('brushSize');
+        const brushSizeLabel = document.getElementById('brushSizeLabel');
+        const brushSortType = document.getElementById('brushSortType');
+        const cursorRing = document.getElementById('cursor-ring');
+
+        let originalImageData = null;
+        let originalImage = new Image();
+        let allButtons = [];
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // --- Brush State ---
+        let isBrushModeActive = false;
+        let isDrawing = false;
+        
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const allBtnEls = document.querySelectorAll('.sort-mode-btn, .effect-btn');
+            allBtnEls.forEach(btn => btn.classList.add('bg-gray-600', 'p-3', 'rounded-lg', 'text-center', 'font-medium', 'hover:bg-purple-600', 'transition-colors', 'duration-200', 'focus:outline-none', 'focus:ring-2', 'focus:ring-purple-500', 'disabled:opacity-50', 'disabled:cursor-not-allowed'));
+            allButtons = [...sortButtons, ...effectButtons, randomizeBtn, brushModeBtn];
+        });
+
+        // --- Image Loading ---
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                originalImage.onload = () => {
+                    canvas.width = originalImage.width;
+                    canvas.height = originalImage.height;
+                    ctx.drawImage(originalImage, 0, 0);
+                    originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    allButtons.forEach(btn => btn.disabled = false);
+                    resetBtn.disabled = false;
+                    downloadBtn.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    canvasPlaceholder.classList.add('hidden');
+                };
+                originalImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- Event Listeners ---
+        sortButtons.forEach(button => button.addEventListener('click', () => startAnimatedSort(button.dataset.mode)));
+        document.getElementById('windEffectBtn').addEventListener('click', windEffect);
+        document.getElementById('jaggedEffectBtn').addEventListener('click', jaggedEffect);
+        document.getElementById('spiralEffectBtn').addEventListener('click', spiralEffect);
+        randomizeBtn.addEventListener('click', randomizeEffect);
+        resetBtn.addEventListener('click', () => {
+            if (originalImageData) {
+                ctx.putImageData(originalImageData, 0, 0);
+                downloadBtn.classList.add('hidden');
+            }
+        });
+
+        // --- Brush Mode Logic ---
+        brushModeBtn.addEventListener('click', () => {
+            isBrushModeActive = !isBrushModeActive;
+            brushModeBtn.textContent = isBrushModeActive ? 'Deactivate Brush Mode' : 'Activate Brush Mode';
+            brushModeBtn.classList.toggle('bg-red-600', isBrushModeActive);
+            brushModeBtn.classList.toggle('hover:bg-red-700', isBrushModeActive);
+            brushModeBtn.classList.toggle('bg-cyan-600', !isBrushModeActive);
+            brushModeBtn.classList.toggle('hover:bg-cyan-700', !isBrushModeActive);
+            brushControls.classList.toggle('hidden', !isBrushModeActive);
+            canvas.classList.toggle('brush-active', isBrushModeActive);
+            
+            if (!isBrushModeActive) {
+                cursorRing.classList.add('hidden');
+            } else {
+                // Set initial size when activated
+                const size = brushSize.value;
+                cursorRing.style.width = `${size}px`;
+                cursorRing.style.height = `${size}px`;
+            }
+        });
+
+        brushSize.addEventListener('input', (e) => {
+            brushSizeLabel.textContent = e.target.value;
+            const size = e.target.value;
+            cursorRing.style.width = `${size}px`;
+            cursorRing.style.height = `${size}px`;
+        });
+        
+        // This function now correctly positions the cursor ring relative to its container
+        function updateCursorRing(e) {
+            if (!isBrushModeActive) return;
+            
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            
+            // Calculate mouse position relative to the container
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Check if cursor is inside the container's bounds.
+            if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+                cursorRing.style.left = `${x}px`;
+                cursorRing.style.top = `${y}px`;
+                cursorRing.classList.remove('hidden'); // Show it
+            } else {
+                cursorRing.classList.add('hidden'); // Hide it if outside
+            }
+        }
+        document.addEventListener('mousemove', updateCursorRing);
+
+
+        canvas.addEventListener('mousedown', (e) => {
+            if(isBrushModeActive) { isDrawing = true; applyBrush(e); }
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if(isBrushModeActive && isDrawing) { applyBrush(e); }
+        });
+        canvas.addEventListener('mouseup', () => { isDrawing = false; });
+        canvas.addEventListener('mouseleave', () => { isDrawing = false; });
+        
+        function applyBrush(e) {
+            if (!isDrawing || !originalImageData) return;
+            const size = parseInt(brushSize.value);
+            const rect = canvas.getBoundingClientRect();
+            // Calculate mouse position relative to the canvas's unscaled dimensions
+            const x = Math.floor((e.clientX - rect.left) / rect.width * canvas.width) - Math.floor(size / 2);
+            const y = Math.floor((e.clientY - rect.top) / rect.height * canvas.height) - Math.floor(size / 2);
+
+            const region = ctx.getImageData(x, y, size, size);
+            const pixels = getPixelArray(region.data);
+            
+            let sortedPixels;
+            const sortType = brushSortType.value;
+            switch(sortType) {
+                 case 'brightness': sortedPixels = countingSortByValue(pixels, p => p[0] + p[1] + p[2]); break;
+                 case 'hue': sortedPixels = countingSortByValue(pixels, p => rgbToHsl(p[0],p[1],p[2])[0] * 360); break;
+                 case 'saturation': sortedPixels = countingSortByValue(pixels, p => rgbToHsl(p[0],p[1],p[2])[1] * 100); break;
+                 case 'red': sortedPixels = countingSortByValue(pixels, p => p[0]); break;
+                 case 'green': sortedPixels = countingSortByValue(pixels, p => p[1]); break;
+                 case 'blue': sortedPixels = countingSortByValue(pixels, p => p[2]); break;
+            }
+            
+            const sortedRegion = flattenPixelArray(sortedPixels, region);
+            ctx.putImageData(sortedRegion, x, y);
+            downloadBtn.classList.remove('hidden'); // Show download btn after first brush stroke
+        }
+
+
+        // --- Main Sorting Functions ---
+        async function startAnimatedSort(mode) {
+             if (!originalImageData) return;
+            ctx.putImageData(originalImageData, 0, 0);
+            setLoading(true, "Sorting pixels...");
+            await sleep(50);
+            const pixels = getPixelArray(originalImageData.data);
+            let sortedPixels;
+            if (mode === 'rgb') sortedPixels = radixSortRGB(pixels);
+            else if (mode === 'brightness') sortedPixels = countingSortByValue(pixels, p => p[0] + p[1] + p[2]);
+            
+            setLoading(true, "Animating result...");
+            await animateFullFrame(sortedPixels);
+            finalizeSort();
+        }
+
+        async function windEffect() {
+            if (!originalImageData) return;
+            ctx.putImageData(originalImageData, 0, 0);
+            setLoading(true, "Creating wind effect...");
+            await sleep(50);
+            const { width, height } = canvas;
+            for (let y = 0; y < height; y++) {
+                const rowImageData = ctx.getImageData(0, y, width, 1);
+                const sortedRow = countingSortByValue(getPixelArray(rowImageData.data), p => p[0] + p[1] + p[2]);
+                ctx.putImageData(flattenPixelArray(sortedRow, rowImageData), 0, y);
+                await sleep(0); 
+            }
+            finalizeSort();
+        }
+
+        async function jaggedEffect() {
+            if (!originalImageData) return;
+            ctx.putImageData(originalImageData, 0, 0);
+            setLoading(true, "Creating jagged effect...");
+            await sleep(50);
+            const { width, height } = canvas;
+            for (let y = 0; y < height; y++) {
+                const rowImageData = ctx.getImageData(0, y, width, 1);
+                let sortedRow = countingSortByValue(getPixelArray(rowImageData.data), p => p[0] + p[1] + p[2]);
+                if (y % 2 !== 0) sortedRow.reverse();
+                ctx.putImageData(flattenPixelArray(sortedRow, rowImageData), 0, y);
+                await sleep(0);
+            }
+            finalizeSort();
+        }
+        
+        async function spiralEffect() {
+            if (!originalImageData) return;
+            ctx.putImageData(originalImageData, 0, 0);
+            setLoading(true, "Calculating spiral...");
+            await sleep(50);
+            const { width, height } = canvas;
+            const pixels = getPixelArray(originalImageData.data);
+            const sortedPixels = countingSortByValue(pixels, p => p[0] + p[1] + p[2]);
+            const spiralCoords = generateSpiralCoords(width, height);
+            
+            setLoading(true, "Drawing spiral...");
+            const newImageData = ctx.createImageData(width, height);
+            for(let i = 0; i < spiralCoords.length; i++) {
+                const {x, y} = spiralCoords[i];
+                if (i < sortedPixels.length) {
+                    const p = sortedPixels[i];
+                    const dataIndex = (y * width + x) * 4;
+                    newImageData.data[dataIndex] = p[0]; newImageData.data[dataIndex+1] = p[1]; newImageData.data[dataIndex+2] = p[2]; newImageData.data[dataIndex+3] = p[3];
+                }
+            }
+            ctx.putImageData(newImageData, 0, 0);
+            finalizeSort();
+        }
+
+        async function randomizeEffect() {
+            const effects = [startAnimatedSort, windEffect, jaggedEffect, spiralEffect];
+            const modes = ['rgb', 'brightness'];
+            const randomEffect = effects[Math.floor(Math.random() * effects.length)];
+            if (randomEffect === startAnimatedSort) {
+                await randomEffect(modes[Math.floor(Math.random() * modes.length)]);
+            } else { await randomEffect(); }
+        }
+
+        // --- Animation & Utility Functions ---
+        async function animateFullFrame(sortedPixels) {
+            const { width, height } = canvas;
+            const newImageData = ctx.createImageData(width, height);
+            let sortedPixelIndex = 0;
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    if (sortedPixelIndex < sortedPixels.length) {
+                        const p = sortedPixels[sortedPixelIndex++];
+                        const dataIndex = (y * width + x) * 4;
+                        newImageData.data[dataIndex] = p[0]; newImageData.data[dataIndex + 1] = p[1]; newImageData.data[dataIndex + 2] = p[2]; newImageData.data[dataIndex + 3] = p[3];
+                    }
+                }
+                ctx.putImageData(newImageData, 0, 0);
+                await sleep(0);
+            }
+        }
+
+        function generateSpiralCoords(width, height) {
+            let x = 0, y = 0, dx = 0, dy = -1;
+            const centerX = Math.floor(width / 2), centerY = Math.floor(height / 2);
+            const totalPixels = width * height; const coords = [];
+            for (let i = 0; i < totalPixels; i++) {
+                if ((-width/2 < x && x <= width/2) && (-height/2 < y && y <= height/2)) {
+                    const absX = centerX + x, absY = centerY + y;
+                    if (absX >= 0 && absX < width && absY >= 0 && absY < height) coords.push({x: absX, y: absY});
+                }
+                if (x === y || (x < 0 && x === -y) || (x > 0 && x === 1 - y)) [dx, dy] = [-dy, dx];
+                x += dx; y += dy;
+            }
+            return coords;
+        }
+
+        function finalizeSort() {
+            downloadBtn.href = canvas.toDataURL('image/png');
+            downloadBtn.classList.remove('hidden');
+            setLoading(false);
+        }
+
+        function setLoading(isLoading, text = "Sorting pixels...") {
+            loader.classList.toggle('hidden', !isLoading);
+            loaderText.textContent = text;
+            allButtons.forEach(btn => btn.disabled = isLoading);
+            resetBtn.disabled = isLoading;
+        }
+
+        // --- Pixel Data & Sort Implementations ---
+        function getPixelArray(data) {
+            const pixels = [];
+            for (let i = 0; i < data.length; i += 4) pixels.push([data[i], data[i + 1], data[i + 2], data[i + 3]]);
+            return pixels;
+        }
+
+        function flattenPixelArray(pixels, imageData) {
+            const data = imageData.data;
+            for (let i = 0; i < pixels.length; i++) {
+                const p = pixels[i];
+                data[i * 4]=p[0]; data[i * 4 + 1]=p[1]; data[i * 4 + 2]=p[2]; data[i * 4 + 3]=p[3];
+            }
+            return imageData;
+        }
+
+        function radixSortRGB(pixels, order = [2, 1, 0]) {
+            let sorted = [...pixels];
+            for (const channelIndex of order) sorted = countingSortStable(sorted, channelIndex);
+            return sorted;
+        }
+
+        function countingSortStable(pixels, channelIndex) {
+            const max = 255; const counts = new Array(max + 1).fill(0); const output = new Array(pixels.length);
+            for (let i = 0; i < pixels.length; i++) counts[pixels[i][channelIndex]]++;
+            for (let i = 1; i <= max; i++) counts[i] += counts[i - 1];
+            for (let i = pixels.length - 1; i >= 0; i--) {
+                const p = pixels[i], val = p[channelIndex], pos = counts[val] - 1;
+                output[pos] = p; counts[val]--;
+            }
+            return output;
+        }
+
+        function countingSortByValue(pixels, getValue) {
+            const buckets = {};
+            for (const pixel of pixels) {
+                const value = getValue(pixel);
+                if (!buckets[value]) buckets[value] = [];
+                buckets[value].push(pixel);
+            }
+            const sortedPixels = [];
+            const sortedKeys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+            for (const key of sortedKeys) {
+                const bucket = buckets[key];
+                for (let i = 0; i < bucket.length; i++) sortedPixels.push(bucket[i]);
+            }
+            return sortedPixels;
+        }
+        
+        function rgbToHsl(r, g, b) {
+            r /= 255, g /= 255, b /= 255; let max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max == min) { h = s = 0; }
+            else {
+                let d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [h, s, l];
+        }
+    </script>
+</body>
+</html>
